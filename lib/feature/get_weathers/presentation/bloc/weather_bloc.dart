@@ -1,49 +1,100 @@
+import 'package:dartz/dartz.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:mobile_assesment/feature/get_weathers/domain/entity/favorite.dart';
+import 'package:mobile_assesment/feature/get_weathers/domain/usecase/favorite_usecase.dart';
+import 'package:mobile_assesment/feature/get_weathers/domain/usecase/initailize_favorite_usecase.dart';
+import 'package:mobile_assesment/feature/get_weathers/presentation/bloc/weather_state.dart';
 
+import '../../../../core/error/failure.dart';
+import '../../../../core/usecase/usecase.dart';
 import '../../domain/entity/weather.dart';
-import '../../domain/repostory/weather_repostory.dart';
+import '../../domain/usecase/weather_usecase.dart';
+import 'weather_event.dart';
 
-class WeatherBloc extends Bloc<WeatherEvent, WeatherState> {
-  final WeatherRepository weatherRepository;
+class WeatherBloc extends Bloc<WeatherConditionEvent, WeatherState> {
+  final WeatherUsecase weatherUsecase;
+  final FavoriteUsecase favoriteUsecase;
+  final InitailizedFavoriteUsecase initializeFavoriteUsecase;
 
-  WeatherBloc(this.weatherRepository) : super(WeatherInitial());
-
-  @override
-  Stream<WeatherState> mapEventToState(WeatherEvent event) async* {
-    if (event is GetWeatherEvent) {
-      yield WeatherLoading();
-      try {
-        final weather = await weatherRepository.getWeatherForCity(event.city);
-        yield WeatherLoaded(weather);
-      } catch (e) {
-        yield WeatherError(e.toString());
-      }
-    }
+  WeatherBloc({
+    required this.weatherUsecase,
+    required this.favoriteUsecase,
+    required this.initializeFavoriteUsecase,
+  }) : super(WeatherInitial()) {
+    on<WeatherEvent>(_onWeatherup);
+    on<FavoriteEvent>(_onFavoriteup);
+    on<InitializeFavoriteEvent>(_onInitializeApp);
   }
-}
 
-class WeatherEvent {}
+  void _onWeatherup(WeatherEvent event, Emitter<WeatherState> emit) async {
+    print("object hellloooooo");
+    emit(WeatherConditonState(status: AuthStatus.loading));
+    final failureOrSignup = await weatherUsecase(
+      WeatherParams(
+        search: event.search,
+        // otp: event.otp,
+      ),
+    );
+    print("obect finished $failureOrSignup.");
+    emit(_eitherSignupOrFailure(failureOrSignup));
+  }
 
-class GetWeatherEvent extends WeatherEvent {
-  final String city;
+  WeatherConditonState _eitherSignupOrFailure(
+      Either<Failure, Weather> failureOrSignup) {
+    final res = failureOrSignup.fold(
+        (l) => WeatherConditonState(
+              status: AuthStatus.error,
+              errorMessage: " _mapLoginFailureToMessage(l)",
+            ),
+        (r) => WeatherConditonState(
+              status: AuthStatus.loaded,
+              weather: r,
+            ));
+    print("objectlll");
+    return res;
+  }
 
-  GetWeatherEvent(this.city);
-}
+  void _onFavoriteup(FavoriteEvent event, Emitter<WeatherState> emit) async {
+    print("object hellloooooo favorite");
+    emit(WeatherConditonState(status: AuthStatus.loading));
+    final failureOrSignup = await favoriteUsecase(
+      FavoriteParams(favorite: event.favorite),
+    );
+    print("obect finished ");
+    emit(_eitherFavoriteOrFailure(failureOrSignup));
+  }
 
-class WeatherState {}
+  FavoriteState _eitherFavoriteOrFailure(
+      Either<Failure, void> failureOrSignup) {
+    final res = failureOrSignup.fold(
+        (l) => FavoriteState(
+              status: AuthStatus.error,
+              errorMessage: "No city found",
+            ),
+        (r) => FavoriteState(
+              status: AuthStatus.loaded,
+            ));
+    print("objectlll");
+    return res;
+  }
 
-class WeatherInitial extends WeatherState {}
+  void _onInitializeApp(
+      InitializeFavoriteEvent event, Emitter<WeatherState> emit) async {
+    emit(const InitializeFavoriteState(status: AuthStatus.loading));
+    final failureOrInitializeApp = await initializeFavoriteUsecase(NoParams());
+    emit(_eitherInitializeAppOrError(failureOrInitializeApp));
+  }
 
-class WeatherLoading extends WeatherState {}
-
-class WeatherLoaded extends WeatherState {
-  final List<Weather> weather;
-
-  WeatherLoaded(this.weather);
-}
-
-class WeatherError extends WeatherState {
-  final String error;
-
-  WeatherError(this.error);
+  FavoriteState _eitherInitializeAppOrError(
+      Either<Failure, Favorite> failureOrInitializeApp) {
+    return failureOrInitializeApp.fold(
+        (l) => FavoriteState(
+              status: AuthStatus.error,
+              errorMessage: "No Favorite found",
+            ),
+        (r) => FavoriteState(
+              status: AuthStatus.loaded,
+              favorite: r,
+            ));
+  }
 }
